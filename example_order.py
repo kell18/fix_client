@@ -1,13 +1,28 @@
-from fix_client import *
+import sys
+import ipaddress
+from fix_client import FixClient
+
 
 def main():
-    with socket.socket() as adaptorSock:
-        adaptorSock.connect(('127.0.0.1', 5002))
-        client = FixClient(adaptorSock, "49=TEST", "56=QUIK")
+    if len(sys.argv) != 2:
+        sys.exit("Error: need to pass adapter port as argument.")
+    port = int(sys.argv[1])
 
-        logon = ["35=A","1=L01-00000F00", "141=Y", "109=E5", "98=0", "108=53"]
-        market_request = ["35=V", "262=256", "263=1", "264=1", "265=1", "267=1", "269=0", "146=1",
-            "22=8", "48=LKOH", "100=MOEX"]
+    with FixClient(('localhost', port), ["49=TEST", "56=QUIK"]) as client:
+        resp, is_success = client.request_logon()
+        if is_success:
+            print("Logon successful.")
+        else:
+            sys.exit("Logon failed with response: `{0}`".format(resp))
+
+        market_data = client.request(["35=V", "262=1", "263=1", "264=1", "265=0", "267=1",
+                                      "269=0", "22=8", "48=LKOH", "100=MOEX"])
+        if "270" in market_data:
+            print("MarketDataRequest successful. Price: {0} {1} ".format(
+                market_data["270"], market_data.get("15", "")))
+        else:
+            sys.exit("MarketDataRequest failed: `{0}` response: `{1}`".format(market_data.get("58", ""), market_data))
+
         order = [
             "35=D",             # MsgType
             "11=129",           # ClOrdID
@@ -19,20 +34,17 @@ def main():
             # "44=4600",          # Price
             "22=8",             # IDSource
             "48=LKOH",          # SecurityID
-            "1=L01-00000F00",   # Account
+            # "1=L01-00000F00",   # Account
             "109=E5",           # ClientID
             "100=MOEX"]
-
-        logon_resp = client.request(logon)
-        print ('Logon response: ' + str(logon_resp))
-
-        mdr_resp = client.request(market_request)
-        print ('MarketDataRequest response: ' + str(mdr_resp))
-        if "270" in mdr_resp:
-            print ("Price of the Market Data Entry: " + str(mdr_resp["270"]))
-
-        # order_reps = client.request(order)
-        # print ('New Order Single: ' + str(order_reps))
+        report = client.request(order)
+        if "39" in report:
+            if report["39"] != "8":
+                print("Order status: " + report["39"])
+            else:
+                print("Order rejected: `{0}` response: `{1}`".format(report["58"], str(report)))
+        else:
+            sys.exit('NewOrderSingle failed: `{0}` response: `{1}` '.format(report.get("58", ""), report))
 
 
 if __name__ == '__main__':

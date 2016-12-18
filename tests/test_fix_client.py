@@ -5,7 +5,7 @@ from fix_client import FixClient
 class TestFixClient(unittest.TestCase):
 
     def setUp(self):
-        self.cli = FixClient(None, "d=f", msg_seq_num_init=1)
+        self.cli = FixClient(None, ["d=f"], msg_seq_num_init=1)
         self.req = self.cli._build_request(["a=b", "c=2"]).decode()
         self.resp = self.req
 
@@ -21,7 +21,7 @@ class TestFixClient(unittest.TestCase):
         self.assertIn("10=176", self.req)
 
     def test_parse_response(self):
-        tags = self.cli._parse_response(self.resp)
+        tags = self.cli.parse_message(self.resp)
         self.assertEqual(tags["a"], "b")
         self.assertEqual(tags["d"], "f")
         self.assertEqual(tags["9"], "17")
