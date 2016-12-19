@@ -34,7 +34,7 @@ class FixClient:
 
     def request_logon(self, is_reset_seq_num=True):
         reset = "Y" if is_reset_seq_num else "N"
-        resp = self.request(["35=A", "141="+reset, "109=E5", "98=0", "108=53"])
+        resp = self.request(["35=A", "141="+reset, "98=0", "108=53"])
         if resp[Tags.MsgType] == "A":
             return resp, True
         else:
@@ -42,13 +42,13 @@ class FixClient:
 
     def request(self, body_tags):
         self.send(body_tags)
-        resp = self.parse_message(self.sock.recv(self.BUFF_SIZE).decode())
+        resp = self.recv()
         if Tags.MsgType not in resp:
             raise InvalidResponseException("MsgType(35) tag is missing in the response.")
         if resp[Tags.MsgType] == "0" or resp[Tags.MsgType] == "1" or resp[Tags.MsgType] == "2":
             # for Heartbeat and TestRequest send back Heartbeat and return next received msg.
             self.send_heartbeat(resp.get(Tags.TestReqID, None))
-            resp = self.parse_message(self.sock.recv(self.BUFF_SIZE).decode())
+            resp = self.recv()
         return resp
 
     def send_heartbeat(self, test_req_ID=None):
@@ -60,6 +60,9 @@ class FixClient:
     def send(self, tags):
         self.sock.send(self._build_request(tags))
         self.msg_seq_num += 1
+
+    def recv(self):
+        return self.parse_message(self.sock.recv(self.BUFF_SIZE).decode())
 
     def parse_message(self, msg):
         *tags, _ = msg.split(self.DELIM)  # msg has a trailing DELIM, so skip it
