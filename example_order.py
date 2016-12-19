@@ -1,13 +1,15 @@
 import sys
-import ipaddress
-import time
 from fix_client import FixClient, Tags
 
+TARGET_CASH_QUANTITY = 100000.0     # upper bound for total stocks cash quantity
+STOCK_EXTRA = 50.0                  # extra per each market stock price
+DEFAULT_LKOH_STOCK_PRICE = 3200.0   # in case of market price is not accepted
 
 def main():
-    if len(sys.argv) != 2:
-        sys.exit("Error: need to pass adapter port as argument.")
+    if len(sys.argv) != 3:
+        sys.exit("Error: need to pass adapter port and order ID (ClOrdID) as arguments.")
     port = int(sys.argv[1])
+    order_id = sys.argv[2]
 
     with FixClient(('localhost', port), ["49=TEST", "56=QUIK"]) as client:
         resp, is_success = client.request_logon()
@@ -20,39 +22,35 @@ def main():
                                       "269=1", "22=8", "48=LKOH", "100=MOEX"])
         if market_data[Tags.MsgType] == "W":
             print("MarketDataRequest successful.")
-            if "270" in market_data:
-                print("Price: {0} {1}\n ".format(market_data["270"], market_data.get("15", "")))
         else:
             sys.exit("MarketDataRequest failed: `{0}` response: `{1}`".format(market_data.get("58", ""), market_data))
 
+        price = (float(market_data["270"]) + STOCK_EXTRA) if "270" in market_data else DEFAULT_LKOH_STOCK_PRICE
+        targ_qty = int(TARGET_CASH_QUANTITY // price)
+        print("Price: {0} {1}, Targ quantity: {2}\n ".format(price, market_data.get("15", ""), targ_qty))
+
         order = [
-            "35=D",             # MsgType
-            "11=129",           # ClOrdID
-            "54=1",             # Side
-            "21=1",             # HandlInst
-            "55=LUKOIL",        # Symbol
-
-            "40=1",             # OrdType
-            #"152=100000",       # CashOrderQty
-            "38=29",            # OrderQty
-            "44=4600",          # Price
-
-            "22=8",             # IDSource
-            "48=LKOH",          # SecurityID
-            "1=L01-00000F00",   # Account
-            "109=E5",           # ClientID
-            "100=MOEX"]
+            "35=D",                     # MsgType
+            "11="+order_id,             # ClOrdID
+            "54=1",                     # Side
+            "21=1",                     # HandlInst
+            "55=LUKOIL",                # Symbol
+            "40=2",                     # OrdType
+            "38="+str(targ_qty),        # OrderQty
+            "44="+str(price),           # Price
+            "22=8",                     # IDSource
+            "48=LKOH",                  # SecurityID
+            "1=L01-00000F00",           # Account
+            # "109=E5",                 # ClientID
+            "100=MOEX"]                 # ExDestination
         report = client.request(order)
         if "39" in report:
             if report["39"] != "8":
-                print("Order status: " + report["39"])
+                print("Order successful. Status: {0}".format(report["39"]))
             else:
-                print("Order rejected: `{0}` response: `{1}`".format(report["58"], str(report)))
+                print("Order rejected: `{0}` response: `{1}`".format(report["58"], report))
         else:
             sys.exit('NewOrderSingle failed: `{0}` response: `{1}` '.format(report.get("58", ""), report))
-
-        # print(client.recv())
-
 
 if __name__ == '__main__':
     main()
